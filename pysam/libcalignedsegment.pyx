@@ -3042,24 +3042,25 @@ cdef class PileupColumn:
             # ignore last ":"
             return force_str(PyBytes_FromStringAndSize(buf.s, buf.l-1)).split(":")
 
-    def get_summary_of_query_sequences(self, bint add_indels=False):
+    def get_summary_of_query_sequences(self, bint add_deletion=True, bint add_insertion=False):
         """Get a count table summary at pileup column position.
 
         return the seq counts for a column pileup.
         - depending on the strand the seq is given in lowercase or uppercase (see get_query_sequences)
         - skipped reference are represented by '>'/'<'
-        - deletion (if add_indels=true) increment the '*' key in the count table (TODO add '#' for deletion on reverse strand)
+        - deletion (if add_indels=true) increment the '*' key in the count table / '#' for deletion on reverse strand
         - insertions (if add_indels=true) increment a key corresponding to the alternative sequence inserted
 
         Parameters
         ---------
 
-        add_indels : bool
+        add_deletion : bool
 
-          If True, add bases for bases inserted into or skipped from the
-          reference. The latter requires a reference sequence file to have
-          been given, e.g. via `pileup(fastafile = ...)`. If no reference
-          sequence is available, skipped bases are represented as 'N's.
+          If True, count deletion
+
+        add_deletion : bool
+
+          If True, count insertion (not implemented yet)
 
         Returns
         -------
@@ -3070,11 +3071,35 @@ cdef class PileupColumn:
 
         cdef kstring_t * buf = &self.buf
 
+        # TODO in case of int_add 
+        #cdef kstring_t * ins_str[20] 
+        #cdef uint32_t ins_count[]
+        #cdef uint8_t ins_l (number of ins to reduce lookups)
+
+        cdef uint32_t A = 0
+        cdef uint32_t T = 0
+        cdef uint32_t C = 0
+        cdef uint32_t G = 0
+        cdef uint32_t a = 0
+        cdef uint32_t t = 0
+        cdef uint32_t c = 0
+        cdef uint32_t g = 0
+        cdef uint32_t N = 0
+        cdef uint32_t n = 0
+        cdef uint32_t SKIP = 0
+        cdef uint32_t skip = 0
+        cdef uint32_t DELETION = 0
+        cdef uint32_t deletion = 0
+
+        cdef uint8_t l_A = <uint8_t>'A'
+        cdef uint8_t l_T = <uint8_t>'T'
+        cdef uint8_t l_C = <uint8_t>'C'
+        cdef uint8_t l_G = <uint8_t>'C'
+
         cdef dict qsums = dict()
 
         cdef uint32_t x = 0
         cdef uint32_t j = 0
-        cdef uint32_t c = 0
         cdef uint8_t cc = 0
         cdef uint8_t rb = 0
         cdef const bam_pileup1_t * p = NULL
@@ -3097,26 +3122,74 @@ cdef class PileupColumn:
             if not (p.is_del or p.is_refskip):
                 if p.qpos < p.b.core.l_qseq:
                     cc = <uint8_t>seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos)]
+                    if cc==l_A:
+                        if bam_is_rev(p.b):
+                            a+=1
+                        else:
+                            A+=1 
+                    elif cc==l_T:
+                        if bam_is_rev(p.b):
+                            t+=1
+                        else:
+                            T+=1
+                    elif cc==l_C:
+                        if bam_is_rev(p.b):
+                            c+=1
+                        else:
+                            C+=1
+                    elif cc==l_G:
+                        if bam_is_rev(p.b):
+                            g+=1
+                        else:
+                            G+=1
                 else:
-                    cc = 'N'
-                kputc(strand_mark_char(cc, p.b),buf)
+                    if bam_is_rev(p.b):
+                        N+=1
+                    else:
+                        n+=1
             elif p.is_refskip:
                     if bam_is_rev(p.b):
-                        kputc('<',buf)
+                        skip+=1
                     else:
-                        kputc('>',buf)
-            elif add_indels:
-                kputc('*',buf)
-            if add_indels:
+                        SKIP+=1
+            elif add_deletion:
+                if bam_is_rev(p.b):
+                    deletion+=1
+                else:
+                    DELETION+=1
+            if add_insertion:
                 if p.indel > 0:
                     for j from 1 <= j <= p.indel:
                         cc = seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos + j)]
-                        kputc(strand_mark_char(cc, p.b),buf)
-            qsum_key=force_str(PyBytes_FromStringAndSize(buf.s, buf.l))
-            if qsum_key in qsums:
-                qsums[qsum_key]+=1
-            else:
-                qsums[qsum_key]=1
+                        #kputc(strand_mark_char(cc, p.b),buf)
+        if A>0:
+            qsums['A']=A
+        if T>0:
+            qsums['T']=T
+        if C>0:
+            qsums['C']=C
+        if G>0:
+            qsums['G']=G
+        if a>0:
+            qsums['a']=a
+        if t>0:
+            qsums['t']=t
+        if c>0:
+            qsums['c']=c
+        if g>0:
+            qsums['g']=g
+        if N>0:
+            qsums['N']=N
+        if n>0:
+            qsums['n']=n
+        if DELETION>0:
+            qsums['*']=DELETION
+        if deletion>0:
+            qsums['#']=deletion
+        if SKIP>0:
+            qsums['>']=SKIP
+        if skip>0:
+            qsums['<']=skip
         return qsums
 
     def get_query_qualities(self):
