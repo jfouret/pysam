@@ -3002,6 +3002,7 @@ cdef class PileupColumn:
                     rb = self.reference_sequence[self.reference_pos]
                     if seq_nt16_table[cc] == seq_nt16_table[rb]:
                         cc = "="
+
                 kputc(strand_mark_char(cc, p.b), buf)
             elif add_indels:
                 if p.is_refskip:
@@ -3040,6 +3041,80 @@ cdef class PileupColumn:
             # quicker to ensemble all and split than to encode all separately.
             # ignore last ":"
             return force_str(PyBytes_FromStringAndSize(buf.s, buf.l-1)).split(":")
+
+    def get_summary_of_query_sequences(self, bint add_indels=False):
+        """Get a count table summary at pileup column position.
+
+        return the seq counts for a column pileup.
+        - depending on the strand the seq is given in lowercase or uppercase (see get_query_sequences)
+        - skipped reference are represented by '>'/'<'
+        - deletion (if add_indels=true) increment the '*' key in the count table (TODO add '#' for deletion on reverse strand)
+        - insertions (if add_indels=true) increment a key corresponding to the alternative sequence inserted
+
+        Parameters
+        ---------
+
+        add_indels : bool
+
+          If True, add bases for bases inserted into or skipped from the
+          reference. The latter requires a reference sequence file to have
+          been given, e.g. via `pileup(fastafile = ...)`. If no reference
+          sequence is available, skipped bases are represented as 'N's.
+
+        Returns
+        -------
+
+        dict: a dict with seq as key and count as values
+
+        """
+        cdef char qsum_key = ''
+
+        cdef dict qsums = dict()
+
+        cdef uint32_t x = 0
+        cdef uint32_t j = 0
+        cdef uint32_t c = 0
+        cdef uint8_t cc = 0
+        cdef uint8_t rb = 0
+        cdef const bam_pileup1_t * p = NULL
+
+        if self.plp == NULL or self.plp[0] == NULL:
+            raise ValueError("PileupColumn accessed after iterator finished")
+        
+        # todo: reference sequence to count matches/mismatches
+        # todo: convert assertions to exceptions
+
+        for x from 0 <= x < self.n_pu:
+            p = &(self.plp[0][x])
+            if p == NULL:
+                raise ValueError(
+                    "pileup buffer out of sync - most likely use of iterator "
+                    "outside loop")
+            if pileup_base_qual_skip(p, self.min_base_quality):
+                continue
+            if not (p.is_del or p.is_refskip):
+                if p.qpos < p.b.core.l_qseq:
+                    cc = <uint8_t>seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos)]
+                else:
+                    cc = 'N'
+                qsum_key=strand_mark_char(cc, p.b)
+            elif p.is_refskip:
+                    if bam_is_rev(p.b):
+                        qsum_key='<'
+                    else:
+                        qsum_key='>'
+            elif add_indels:
+                qsum_key='*'
+            if add_indels:
+                if p.indel > 0:
+                    for j from 1 <= j <= p.indel:
+                        cc = seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos + j)]
+                        qsum_key=qsum_key+strand_mark_char(cc, p.b)
+            if qsum_key in qsums:
+                qsums[qsum_key]+=1
+            else:
+                qsums[qsum_key]=1
+        return qsums
 
     def get_query_qualities(self):
         """query base quality scores at pileup column position.
