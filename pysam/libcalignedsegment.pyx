@@ -3067,7 +3067,8 @@ cdef class PileupColumn:
         dict: a dict with seq as key and count as values
 
         """
-        cdef char qsum_key = ''
+
+        cdef kstring_t * buf = &self.buf
 
         cdef dict qsums = dict()
 
@@ -3085,6 +3086,7 @@ cdef class PileupColumn:
         # todo: convert assertions to exceptions
 
         for x from 0 <= x < self.n_pu:
+            buf.l = 0
             p = &(self.plp[0][x])
             if p == NULL:
                 raise ValueError(
@@ -3097,19 +3099,20 @@ cdef class PileupColumn:
                     cc = <uint8_t>seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos)]
                 else:
                     cc = 'N'
-                qsum_key=strand_mark_char(cc, p.b)
+                kputc(strand_mark_char(cc, p.b),buf)
             elif p.is_refskip:
                     if bam_is_rev(p.b):
-                        qsum_key='<'
+                        kputc('<',buf)
                     else:
-                        qsum_key='>'
+                        kputc('>',buf)
             elif add_indels:
-                qsum_key='*'
+                kputc('*',buf)
             if add_indels:
                 if p.indel > 0:
                     for j from 1 <= j <= p.indel:
                         cc = seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos + j)]
-                        qsum_key=qsum_key+strand_mark_char(cc, p.b)
+                        kputc(strand_mark_char(cc, p.b),buf)
+            qsum_key=force_str(PyBytes_FromStringAndSize(buf.s, buf.l))
             if qsum_key in qsums:
                 qsums[qsum_key]+=1
             else:
