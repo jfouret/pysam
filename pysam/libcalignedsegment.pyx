@@ -3048,7 +3048,7 @@ cdef class PileupColumn:
         return the seq counts for a column pileup.
         - depending on the strand the seq is given in lowercase or uppercase (see get_query_sequences)
         - skipped reference are represented by '>'/'<'
-        - deletion (if add_indels=true) increment the '*' key in the count table / '#' for deletion on reverse strand
+        - deletion (if add_indels=true) increment the '*' key in the count table. Optionally '#' for deletion on reverse strand (see alt_symbol_rev_deletion)
         - insertions (if add_indels=true) increment a key corresponding to the alternative sequence inserted
 
         Parameters
@@ -3056,11 +3056,14 @@ cdef class PileupColumn:
 
         add_deletion : bool
 
-          If True, count deletion
+          If True, counts deletion.
 
-        add_deletion : bool
+        add_insertion : bool
 
-          If True, count insertion (not implemented yet)
+          If True, counts insertion (not implemented yet).
+
+        alt_symbol_rev_deletion:
+          If True, introduction an alternative notation ('#') for a deletion on the reverse strand.
 
         Returns
         -------
