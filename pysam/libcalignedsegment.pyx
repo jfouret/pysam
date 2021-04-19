@@ -3151,9 +3151,10 @@ cdef class PileupColumn:
                             n+=1
                         else:
                             N+=1
-                    raise ValueError(
-                        "This char "+force_str(PyBytes_FromString(<char*>cc))+" in your alignment is not (yet) expected by the method "
-                        "'get_summary_of_query_sequences'")
+                    else:
+                        raise ValueError(
+                            "This char "+force_str(PyBytes_FromString(<char*>cc))+" in your alignment is not (yet) expected by the method "
+                            "'get_summary_of_query_sequences'")
                 else: # NOTE low quality should not be reported as N
                     if bam_is_rev(p.b):
                         N+=1
