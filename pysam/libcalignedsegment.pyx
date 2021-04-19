@@ -63,7 +63,7 @@ import struct
 cimport cython
 from cpython cimport array as c_array
 from cpython.version cimport PY_MAJOR_VERSION
-from cpython cimport PyBytes_FromStringAndSize
+from cpython cimport PyBytes_FromStringAndSize, PyBytes_FromString
 from libc.string cimport strchr
 from cpython cimport array as c_array
 from libc.stdint cimport INT8_MIN, INT16_MIN, INT32_MIN, \
@@ -3042,7 +3042,7 @@ cdef class PileupColumn:
             # ignore last ":"
             return force_str(PyBytes_FromStringAndSize(buf.s, buf.l-1)).split(":")
 
-    def get_summary_of_query_sequences(self, bint add_deletion=True, bint add_insertion=False):
+    def get_summary_of_query_sequences(self, bint add_deletion=True, bint add_insertion=False, bint alt_symbol_rev_deletion=False):
         """Get a count table summary at pileup column position.
 
         return the seq counts for a column pileup.
@@ -3094,7 +3094,8 @@ cdef class PileupColumn:
         cdef uint8_t l_A = <uint8_t>'A'
         cdef uint8_t l_T = <uint8_t>'T'
         cdef uint8_t l_C = <uint8_t>'C'
-        cdef uint8_t l_G = <uint8_t>'C'
+        cdef uint8_t l_G = <uint8_t>'G'
+        cdef uint8_t l_N = <uint8_t>'N'
 
         cdef dict qsums = dict()
 
@@ -3142,7 +3143,15 @@ cdef class PileupColumn:
                             g+=1
                         else:
                             G+=1
-                else:
+                    elif cc==l_N:
+                        if bam_is_rev(p.b):
+                            n+=1
+                        else:
+                            N+=1
+                    raise ValueError(
+                        "This char "+force_str(PyBytes_FromString(<char*>cc))+" in your alignment is not (yet) expected by the method "
+                        "'get_summary_of_query_sequences'")
+                else: # NOTE low quality should not be reported as N
                     if bam_is_rev(p.b):
                         N+=1
                     else:
@@ -3162,30 +3171,35 @@ cdef class PileupColumn:
                     for j from 1 <= j <= p.indel:
                         cc = seq_nt16_str[bam_seqi(bam_get_seq(p.b), p.qpos + j)]
                         #kputc(strand_mark_char(cc, p.b),buf)
-        if A>0:
+        if A!=0:
             qsums['A']=A
-        if T>0:
+        if T!=0:
             qsums['T']=T
-        if C>0:
+        if C!=0:
             qsums['C']=C
-        if G>0:
+        if G!=0:
             qsums['G']=G
-        if a>0:
+        if a!=0:
             qsums['a']=a
-        if t>0:
+        if t!=0:
             qsums['t']=t
-        if c>0:
+        if c!=0:
             qsums['c']=c
-        if g>0:
+        if g!=0:
             qsums['g']=g
-        if N>0:
+        if N!=0:
             qsums['N']=N
-        if n>0:
+        if n!=0:
             qsums['n']=n
-        if DELETION>0:
+        if DELETION!=0:
             qsums['*']=DELETION
-        if deletion>0:
-            qsums['#']=deletion
+        if deletion!=0:
+            if alt_symbol_rev_deletion:
+                qsums['#']=deletion
+            elif DELETION!=0:
+                qsums['*']+=deletion
+            else:
+                qsums['*']=deletion
         if SKIP>0:
             qsums['>']=SKIP
         if skip>0:
